@@ -27,7 +27,7 @@ from training.train_compare import (
 )
 
 
-MODEL_NAME = "A"  # Replace with the selected model letter: A, B, C, or D.
+MODEL_NAME = "C"  # XGBoost had the highest validation PR-AUC in model_comparison.csv.
 MIN_PRECISION = 0.80
 MODEL_VERSION = {
     "A": "logistic-regression-v1",
