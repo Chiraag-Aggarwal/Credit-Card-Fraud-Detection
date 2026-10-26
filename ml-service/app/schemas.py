@@ -44,3 +44,20 @@ class PredictionResponse(BaseModel):
     is_fraud: bool
     threshold: float = Field(ge=0, le=1)
     model_version: str
+
+
+class ModelMetrics(BaseModel):
+    precision: float
+    recall: float
+    f1: float
+    roc_auc: float
+    pr_auc: float
+    confusion_matrix: list[list[int]]
+
+
+class ModelInfoResponse(BaseModel):
+    model_version: str
+    threshold: float = Field(ge=0, le=1)
+    min_precision: float = Field(ge=0, le=1)
+    trained_at: str
+    metrics: ModelMetrics

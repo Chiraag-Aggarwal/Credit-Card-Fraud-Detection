@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import joblib
@@ -48,7 +49,20 @@ def test_client(tmp_path, monkeypatch):
         encoding="utf-8",
     )
     (artifacts_dir / "metrics.json").write_text(
-        json.dumps({"model_version": "test-v1", "pr_auc": 0.95}),
+        json.dumps(
+            {
+                "model_version": "test-v1",
+                "trained_at": "2026-10-26T00:00:00+00:00",
+                "precision": 0.91,
+                "recall": 0.82,
+                "f1": 0.86,
+                "roc_auc": 0.97,
+                "pr_auc": 0.95,
+                "confusion_matrix": [[100, 2], [3, 10]],
+                "date": "this must not appear in model info",
+                "split_sizes": {"train": 100},
+            }
+        ),
         encoding="utf-8",
     )
     monkeypatch.setattr(model_loader, "MODEL_PATH", artifacts_dir / "model.joblib")
@@ -72,6 +86,32 @@ def test_health_reports_loaded_model(test_client) -> None:
         "model_loaded": True,
         "model_version": "test-v1",
     }
+
+def test_cors_allows_only_configured_client_url(test_client) -> None:
+    configured_origin = os.getenv("CLIENT_URL", "http://localhost:5173")
+    rejected_origin = (
+        "https://untrusted.example"
+        if configured_origin != "https://untrusted.example"
+        else "https://another-untrusted.example"
+    )
+
+    allowed = test_client.options(
+        "/health",
+        headers={
+            "Origin": configured_origin,
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    rejected = test_client.options(
+        "/health",
+        headers={
+            "Origin": rejected_origin,
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+
+    assert allowed.headers["access-control-allow-origin"] == configured_origin
+    assert "access-control-allow-origin" not in rejected.headers
 
 
 def test_prediction_rejects_missing_feature(test_client) -> None:
@@ -112,9 +152,28 @@ def test_model_info_includes_metrics_and_saved_threshold(test_client) -> None:
     response = test_client.get("/model-info")
 
     assert response.status_code == 200
-    assert response.json()["model_version"] == "test-v1"
-    assert response.json()["pr_auc"] == 0.95
-    assert response.json()["threshold"] == 0.5
+    body = response.json()
+    assert set(body) == {
+        "model_version",
+        "threshold",
+        "min_precision",
+        "trained_at",
+        "metrics",
+    }
+    assert body == {
+        "model_version": "test-v1",
+        "threshold": 0.5,
+        "min_precision": 0.8,
+        "trained_at": "2026-10-26T00:00:00+00:00",
+        "metrics": {
+            "precision": 0.91,
+            "recall": 0.82,
+            "f1": 0.86,
+            "roc_auc": 0.97,
+            "pr_auc": 0.95,
+            "confusion_matrix": [[100, 2], [3, 10]],
+        },
+    }
 
 
 def test_wrong_api_key_is_rejected_when_key_is_configured(
@@ -135,6 +194,30 @@ def test_startup_reports_missing_model_artifact(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(model_loader, "MODEL_PATH", tmp_path / "missing-model.joblib")
 
     with pytest.raises(FileNotFoundError, match="Required model artifact is missing"):
+        model_loader.load_model_artifacts()
+
+
+def test_startup_reports_missing_trained_at_metadata(tmp_path, monkeypatch) -> None:
+    artifacts_dir = tmp_path / "artifacts"
+    artifacts_dir.mkdir()
+    joblib.dump(fit_test_model(), artifacts_dir / "model.joblib")
+    (artifacts_dir / "threshold.json").write_text(
+        json.dumps({"threshold": 0.5, "min_precision": 0.8}),
+        encoding="utf-8",
+    )
+    (artifacts_dir / "metrics.json").write_text(
+        json.dumps({"model_version": "test-v1"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(model_loader, "MODEL_PATH", artifacts_dir / "model.joblib")
+    monkeypatch.setattr(
+        model_loader, "THRESHOLD_PATH", artifacts_dir / "threshold.json"
+    )
+    monkeypatch.setattr(
+        model_loader, "METRICS_PATH", artifacts_dir / "metrics.json"
+    )
+
+    with pytest.raises(RuntimeError, match="trained_at"):
         model_loader.load_model_artifacts()
 
 

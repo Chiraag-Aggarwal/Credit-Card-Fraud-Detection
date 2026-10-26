@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import Field
 
 from app.model_loader import load_model_artifacts
-from app.schemas import PredictionResponse, TransactionFeatures
+from app.schemas import ModelInfoResponse, PredictionResponse, TransactionFeatures
 
 
 logger = logging.getLogger("fraud_detection_api")
@@ -21,11 +21,12 @@ MAX_BATCH_SIZE = 100
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
-    model, threshold, metrics, model_version = load_model_artifacts()
+    model, threshold, metrics, model_version, threshold_settings = load_model_artifacts()
     application.state.model = model
     application.state.threshold = threshold
     application.state.metrics = metrics
     application.state.model_version = model_version
+    application.state.threshold_settings = threshold_settings
     logger.info("Loaded fraud model version %s", model_version)
     yield
 
@@ -33,12 +34,7 @@ async def lifespan(application: FastAPI):
 app = FastAPI(title="Fraud Detection ML Service", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=[os.getenv("CLIENT_URL", "http://localhost:5173")],
     allow_credentials=True,
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type", "X-API-Key"],
@@ -50,8 +46,13 @@ async def log_requests(request: Request, call_next):
     started = perf_counter()
     try:
         response = await call_next(request)
-    except Exception:
-        logger.exception("Request failed: %s %s", request.method, request.url.path)
+    except Exception as error:
+        logger.error(
+            "Request failed: %s %s (%s)",
+            request.method,
+            request.url.path,
+            type(error).__name__,
+        )
         raise
     logger.info(
         "%s %s returned %s in %.2f ms",
@@ -107,9 +108,31 @@ async def health(request: Request) -> dict[str, str | bool]:
     }
 
 
-@app.get("/model-info", dependencies=[Depends(verify_api_key)])
-async def model_info(request: Request) -> dict:
-    return {**request.app.state.metrics, "threshold": request.app.state.threshold}
+@app.get(
+    "/model-info",
+    response_model=ModelInfoResponse,
+    dependencies=[Depends(verify_api_key)],
+)
+async def model_info(request: Request) -> ModelInfoResponse:
+    metrics = request.app.state.metrics
+    threshold_settings = request.app.state.threshold_settings
+    return ModelInfoResponse(
+        model_version=request.app.state.model_version,
+        threshold=request.app.state.threshold,
+        min_precision=threshold_settings["min_precision"],
+        trained_at=metrics["trained_at"],
+        metrics={
+            name: metrics[name]
+            for name in (
+                "precision",
+                "recall",
+                "f1",
+                "roc_auc",
+                "pr_auc",
+                "confusion_matrix",
+            )
+        },
+    )
 
 
 @app.post(

@@ -23,7 +23,7 @@ def _read_json(path: Path) -> dict[str, Any]:
     return content
 
 
-def load_model_artifacts() -> tuple[Any, float, dict[str, Any], str]:
+def load_model_artifacts() -> tuple[Any, float, dict[str, Any], str, dict[str, Any]]:
     """Load the model and its metadata once as the API starts."""
     if not MODEL_PATH.is_file():
         raise FileNotFoundError(f"Required model artifact is missing: {MODEL_PATH}")
@@ -39,10 +39,35 @@ def load_model_artifacts() -> tuple[Any, float, dict[str, Any], str]:
         raise RuntimeError(f"Artifact {THRESHOLD_PATH} must contain a numeric threshold.")
     if not 0 <= threshold <= 1:
         raise RuntimeError(f"Artifact threshold must be between 0 and 1: {THRESHOLD_PATH}")
+    min_precision = threshold_data.get("min_precision")
+    if (
+        isinstance(min_precision, bool)
+        or not isinstance(min_precision, (int, float))
+        or not 0 <= min_precision <= 1
+    ):
+        raise RuntimeError(
+            f"Artifact {THRESHOLD_PATH} must contain a numeric min_precision "
+            "between 0 and 1."
+        )
 
     model_version = metrics.get("model_version")
     if not isinstance(model_version, str) or not model_version.strip():
         raise RuntimeError(
             f"Artifact {METRICS_PATH} must contain a non-empty model_version."
         )
-    return model, float(threshold), metrics, model_version
+    required_metrics = (
+        "trained_at",
+        "precision",
+        "recall",
+        "f1",
+        "roc_auc",
+        "pr_auc",
+        "confusion_matrix",
+    )
+    missing_metrics = [name for name in required_metrics if name not in metrics]
+    if missing_metrics:
+        raise RuntimeError(
+            f"Artifact {METRICS_PATH} is missing required fields: "
+            f"{', '.join(missing_metrics)}"
+        )
+    return model, float(threshold), metrics, model_version, threshold_data

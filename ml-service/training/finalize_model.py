@@ -1,6 +1,6 @@
 """Select a validation threshold, then evaluate and save one final model."""
 
-from datetime import date
+from datetime import date, datetime, timezone
 import json
 from pathlib import Path
 
@@ -209,6 +209,7 @@ def finalize_model(
             "test": int(len(y_test)),
         },
         "date": date.today().isoformat(),
+        "trained_at": datetime.now(timezone.utc).isoformat(),
     }
 
     artifacts_dir.mkdir(parents=True, exist_ok=True)
