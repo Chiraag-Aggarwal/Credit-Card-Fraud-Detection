@@ -6,4 +6,11 @@ __pycache__
 dist
 data/creditcard.csv
 data/processed
+ml-service/data/creditcard.csv
 ml-service/data/processed
+
+# Keep trained model artifacts available to the deployed ML service.
+!/ml-service/artifacts/
+!/ml-service/artifacts/model.joblib
+!/ml-service/artifacts/threshold.json
+!/ml-service/artifacts/metrics.json

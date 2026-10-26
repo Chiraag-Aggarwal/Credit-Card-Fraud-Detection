@@ -50,6 +50,7 @@ def test_finalize_model_saves_pipeline_threshold_metrics_and_heatmap(tmp_path) -
     assert matrix[1].sum() == 6
     assert matrix[1, 0] == 0
     assert metrics["model_version"] == "logistic-regression-v1"
+    assert metrics["trained_at"]
     assert joblib.load(tmp_path / "model.joblib").predict(features.iloc[:2]).shape == (2,)
     assert json.loads((tmp_path / "threshold.json").read_text())["min_precision"] == 0.8
     assert json.loads((tmp_path / "metrics.json").read_text())["pr_auc"] == metrics["pr_auc"]

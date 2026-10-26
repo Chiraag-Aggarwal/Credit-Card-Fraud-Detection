@@ -1,6 +1,6 @@
 """Select a validation threshold, then evaluate and save one final model."""
 
-from datetime import date
+from datetime import date, datetime, timezone
 import json
 from pathlib import Path
 
@@ -27,7 +27,7 @@ from training.train_compare import (
 )
 
 
-MODEL_NAME = "A"  # Replace with the selected model letter: A, B, C, or D.
+MODEL_NAME = "C"  # XGBoost had the highest validation PR-AUC in model_comparison.csv.
 MIN_PRECISION = 0.80
 MODEL_VERSION = {
     "A": "logistic-regression-v1",
@@ -209,6 +209,7 @@ def finalize_model(
             "test": int(len(y_test)),
         },
         "date": date.today().isoformat(),
+        "trained_at": datetime.now(timezone.utc).isoformat(),
     }
 
     artifacts_dir.mkdir(parents=True, exist_ok=True)
